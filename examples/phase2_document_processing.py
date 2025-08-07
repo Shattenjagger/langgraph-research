@@ -123,17 +123,17 @@ async def test_single_document(workflow: DocumentProcessingWorkflow, doc_type: s
             print(json.dumps(result.extracted_data, indent=2))
         
         if result.human_review_required:
-            print(f"\n⚠️  HUMAN REVIEW REQUIRED")
+            print(f"\nТРЕБУЕТСЯ РУЧНОЕ РАССМОТРЕНИЕ")
         
         if result.error_message:
-            print(f"\n❌ ERROR: {result.error_message}")
+            print(f"\nОШИБКА: {result.error_message}")
         
-        print(f"\nProcessing Notes:")
+        print(f"\nЗаметки по обработке:")
         for note in result.processing_notes:
             print(f"  - {note}")
             
     except Exception as e:
-        print(f"❌ Failed to process {doc_type} document: {e}")
+        print(f"Не удалось обработать документ {doc_type}: {e}")
 
 
 async def test_workflow_performance():

@@ -108,7 +108,10 @@ class DocumentProcessor:
     
     def _create_extraction_prompt(self, state: DocumentProcessingState) -> str:
         """Create prompt for data extraction."""
-        doc_type = state.document_type.value if state.document_type else "unknown"
+        if state.document_type:
+            doc_type = state.document_type.value if hasattr(state.document_type, 'value') else str(state.document_type)
+        else:
+            doc_type = "unknown"
         
         if state.document_type == DocumentType.INVOICE:
             fields = "vendor_name, amount, date, invoice_number, tax_amount, line_items"
@@ -152,8 +155,13 @@ JSON:"""
     
     def _create_validation_prompt(self, state: DocumentProcessingState) -> str:
         """Create prompt for data validation."""
+        if state.document_type:
+            doc_type = state.document_type.value if hasattr(state.document_type, 'value') else str(state.document_type)
+        else:
+            doc_type = "document"
+        
         return f"""
-Validate this extracted data from a {state.document_type.value if state.document_type else 'document'}:
+Validate this extracted data from a {doc_type}:
 
 {json.dumps(state.extracted_data, indent=2)}
 

@@ -63,7 +63,7 @@ class DocumentProcessingWorkflow:
         # Create final result
         state.final_result = {
             "document_id": state.document_id,
-            "document_type": state.document_type.value if state.document_type else "unknown",
+            "document_type": state.document_type.value if state.document_type and hasattr(state.document_type, 'value') else str(state.document_type) if state.document_type else "unknown",
             "classification_confidence": state.classification_confidence,
             "extracted_data": state.extracted_data,
             "validation_issues": state.validation_results,
