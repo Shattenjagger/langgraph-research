@@ -105,32 +105,44 @@ async def test_single_document(workflow: DocumentProcessingWorkflow, doc_type: s
         )
         
         # Display results
-        print(f"Document ID: {result.document_id}")
-        print(f"Status: {result.status.value}")
-        print(f"Document Type: {result.document_type.value if result.document_type else 'Unknown'}")
-        print(f"Classification Confidence: {result.classification_confidence:.2f}")
-        print(f"Processing Time: {result.processing_time:.2f}s")
-        print(f"Models Used: {', '.join(result.models_used)}")
-        print(f"Retry Count: {result.retry_count}")
+        print(f"Document ID: {result.get('document_id', 'Unknown')}")
         
-        if result.validation_results:
-            print(f"\nValidation Issues ({len(result.validation_results)}):")
-            for issue in result.validation_results:
+        status = result.get('status')
+        status_str = status.value if hasattr(status, 'value') else str(status)
+        print(f"Status: {status_str}")
+        
+        doc_type = result.get('document_type')
+        doc_type_str = doc_type.value if hasattr(doc_type, 'value') else str(doc_type) if doc_type else 'Unknown'
+        print(f"Document Type: {doc_type_str}")
+        
+        print(f"Classification Confidence: {result.get('classification_confidence', 0):.2f}")
+        print(f"Processing Time: {result.get('processing_time', 0):.2f}s")
+        print(f"Models Used: {', '.join(result.get('models_used', []))}")
+        print(f"Retry Count: {result.get('retry_count', 0)}")
+        
+        validation_results = result.get('validation_results', [])
+        if validation_results:
+            print(f"\nValidation Issues ({len(validation_results)}):")
+            for issue in validation_results:
                 print(f"  - {issue}")
         
-        if result.extracted_data:
+        extracted_data = result.get('extracted_data')
+        if extracted_data:
             print(f"\nExtracted Data:")
-            print(json.dumps(result.extracted_data, indent=2))
+            print(json.dumps(extracted_data, indent=2))
         
-        if result.human_review_required:
+        if result.get('human_review_required'):
             print(f"\nТРЕБУЕТСЯ РУЧНОЕ РАССМОТРЕНИЕ")
         
-        if result.error_message:
-            print(f"\nОШИБКА: {result.error_message}")
+        error_message = result.get('error_message')
+        if error_message:
+            print(f"\nОШИБКА: {error_message}")
         
-        print(f"\nЗаметки по обработке:")
-        for note in result.processing_notes:
-            print(f"  - {note}")
+        processing_notes = result.get('processing_notes', [])
+        if processing_notes:
+            print(f"\nЗаметки по обработке:")
+            for note in processing_notes:
+                print(f"  - {note}")
             
     except Exception as e:
         print(f"Не удалось обработать документ {doc_type}: {e}")
@@ -150,12 +162,16 @@ async def test_workflow_performance():
     for doc_type, content in SAMPLE_DOCUMENTS.items():
         try:
             result = await workflow.process_document(content, f"perf_test_{doc_type}")
+            
+            status = result.get('status')
+            status_str = status.value if hasattr(status, 'value') else str(status)
+            
             results.append({
                 "type": doc_type,
-                "time": result.processing_time,
-                "models": len(result.models_used),
-                "retries": result.retry_count,
-                "status": result.status.value
+                "time": result.get('processing_time', 0),
+                "models": len(result.get('models_used', [])),
+                "retries": result.get('retry_count', 0),
+                "status": status_str
             })
         except Exception as e:
             print(f"Failed to process {doc_type}: {e}")
