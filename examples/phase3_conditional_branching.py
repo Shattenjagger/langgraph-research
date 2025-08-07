@@ -141,53 +141,79 @@ async def test_conditional_routing(workflow: ConditionalDocumentWorkflow, doc_na
             document_id=f"conditional_test_{doc_name}"
         )
         
-        print(f"📋 Document ID: {result.document_id}")
-        print(f"🔄 Final Status: {result.status.value}")
-        print(f"📊 Processing Time: {result.processing_time:.2f}s")
-        print(f"🔄 Retry Count: {result.retry_count}")
+        # Handle both object and dictionary returns
+        def safe_get(obj, key, default=None):
+            if hasattr(obj, 'get'):
+                return obj.get(key, default)
+            else:
+                return getattr(obj, key, default)
         
-        if result.final_result:
-            processing_path = result.final_result.get("processing_path", "unknown")
+        def safe_get_value(obj):
+            if hasattr(obj, 'value'):
+                return obj.value
+            else:
+                return str(obj) if obj else "unknown"
+        
+        print(f"📋 Document ID: {safe_get(result, 'document_id', 'Unknown')}")
+        
+        status = safe_get(result, 'status')
+        status_str = safe_get_value(status)
+        print(f"🔄 Final Status: {status_str}")
+        
+        print(f"📊 Processing Time: {safe_get(result, 'processing_time', 0):.2f}s")
+        print(f"🔄 Retry Count: {safe_get(result, 'retry_count', 0)}")
+        
+        final_result = safe_get(result, 'final_result')
+        if final_result:
+            processing_path = safe_get(final_result, "processing_path", "unknown")
             print(f"🛤️  Processing Path: {processing_path}")
         
-        print(f"🧠 Models Used: {', '.join(result.models_used)}")
+        models_used = safe_get(result, 'models_used', [])
+        print(f"🧠 Models Used: {', '.join(models_used)}")
         
         # Show classification results
-        doc_type = result.document_type.value if result.document_type else "unknown"
-        print(f"📄 Document Type: {doc_type} (confidence: {result.classification_confidence:.2f})")
+        doc_type = safe_get(result, 'document_type')
+        doc_type_str = safe_get_value(doc_type)
+        confidence = safe_get(result, 'classification_confidence', 0)
+        print(f"📄 Document Type: {doc_type_str} (confidence: {confidence:.2f})")
         
         # Show processing notes (routing decisions)
         print(f"\n📝 Processing Decision Trail:")
-        for i, note in enumerate(result.processing_notes, 1):
+        processing_notes = safe_get(result, 'processing_notes', [])
+        for i, note in enumerate(processing_notes, 1):
             print(f"   {i}. {note}")
         
         # Show validation results if any
-        if result.validation_results:
-            print(f"\n⚠️  Validation Issues ({len(result.validation_results)}):")
-            for issue in result.validation_results:
+        validation_results = safe_get(result, 'validation_results', [])
+        if validation_results:
+            print(f"\n⚠️  Validation Issues ({len(validation_results)}):")
+            for issue in validation_results:
                 print(f"   - {issue}")
         
         # Show human review status
-        if result.human_review_required:
+        human_review = safe_get(result, 'human_review_required', False)
+        if human_review:
             print(f"\n👤 HUMAN REVIEW REQUIRED")
             print("   Reasons: Check validation issues and processing notes above")
         else:
             print(f"\n✅ AUTOMATED PROCESSING COMPLETED")
         
         # Show key extracted data
-        if result.extracted_data and len(result.extracted_data) > 0:
+        extracted_data = safe_get(result, 'extracted_data', {})
+        if extracted_data and len(extracted_data) > 0:
             print(f"\n💾 Key Extracted Data:")
             # Show first few fields to avoid clutter
             shown_fields = 0
-            for key, value in result.extracted_data.items():
+            for key, value in extracted_data.items():
                 if shown_fields < 3 and key != "raw_response":
                     print(f"   {key}: {str(value)[:50]}{'...' if len(str(value)) > 50 else ''}")
                     shown_fields += 1
-            if len(result.extracted_data) > 3:
-                print(f"   ... and {len(result.extracted_data) - 3} more fields")
+            if len(extracted_data) > 3:
+                print(f"   ... and {len(extracted_data) - 3} more fields")
         
-        if result.error_message:
-            print(f"\n❌ ERROR: {result.error_message}")
+        error_message = safe_get(result, 'error_message')
+        if error_message:
+            print(f"\n❌ ERROR: {error_message}")
         
         return result
         
@@ -209,18 +235,36 @@ async def analyze_routing_patterns():
     
     for doc_name, content in BRANCHING_TEST_DOCUMENTS.items():
         result = await test_conditional_routing(workflow, doc_name, content)
-        if result and result.final_result:
-            results.append({
-                "name": doc_name,
-                "path": result.final_result.get("processing_path", "unknown"),
-                "doc_type": result.document_type.value if result.document_type else "unknown",
-                "confidence": result.classification_confidence,
-                "models_used": len(result.models_used),
-                "retry_count": result.retry_count,
-                "human_review": result.human_review_required,
-                "time": result.processing_time,
-                "status": result.status.value
-            })
+        if result:
+            # Handle both object and dictionary returns safely
+            def safe_get(obj, key, default=None):
+                if hasattr(obj, 'get'):
+                    return obj.get(key, default)
+                else:
+                    return getattr(obj, key, default)
+            
+            def safe_get_value(obj):
+                if hasattr(obj, 'value'):
+                    return obj.value
+                else:
+                    return str(obj) if obj else "unknown"
+            
+            final_result = safe_get(result, 'final_result')
+            if final_result:
+                doc_type = safe_get(result, 'document_type')
+                status = safe_get(result, 'status')
+                
+                results.append({
+                    "name": doc_name,
+                    "path": safe_get(final_result, "processing_path", "unknown"),
+                    "doc_type": safe_get_value(doc_type),
+                    "confidence": safe_get(result, 'classification_confidence', 0),
+                    "models_used": len(safe_get(result, 'models_used', [])),
+                    "retry_count": safe_get(result, 'retry_count', 0),
+                    "human_review": safe_get(result, 'human_review_required', False),
+                    "time": safe_get(result, 'processing_time', 0),
+                    "status": safe_get_value(status)
+                })
     
     if results:
         print(f"\n📊 ROUTING SUMMARY:")

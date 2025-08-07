@@ -459,7 +459,14 @@ class ComplexLoanProcessingWorkflow:
             # Run the complete workflow
             final_state = await self.graph.ainvoke(initial_state)
             
-            logger.info(f"Completed loan application processing: {application_id} -> {final_state.current_status.value}")
+            # Handle both object and dictionary returns
+            if hasattr(final_state, 'current_status'):
+                status = final_state.current_status.value if hasattr(final_state.current_status, 'value') else str(final_state.current_status)
+            else:
+                status = final_state.get('current_status', {})
+                status = status.value if hasattr(status, 'value') else str(status)
+            
+            logger.info(f"Completed loan application processing: {application_id} -> {status}")
             
             return final_state
             

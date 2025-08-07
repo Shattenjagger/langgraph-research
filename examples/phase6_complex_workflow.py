@@ -339,104 +339,144 @@ async def process_loan_application(workflow: ComplexLoanProcessingWorkflow, scen
         
         processing_time = time.time() - start_time
         
+        # Helper functions for safe attribute access
+        def safe_get(obj, key, default=None):
+            if hasattr(obj, 'get'):
+                return obj.get(key, default)
+            else:
+                return getattr(obj, key, default)
+        
+        def safe_get_value(obj):
+            if hasattr(obj, 'value'):
+                return obj.value
+            else:
+                return str(obj) if obj else "unknown"
+        
         # Отображение комплексных результатов
         print(f"\n📊 РЕЗУЛЬТАТЫ ОБРАБОТКИ:")
-        print(f"   ID заявки: {result.application_id}")
-        print(f"   Финальный статус: {result.current_status.value}")
+        print(f"   ID заявки: {safe_get(result, 'application_id', 'Unknown')}")
+        
+        current_status = safe_get(result, 'current_status')
+        status_str = safe_get_value(current_status)
+        print(f"   Финальный статус: {status_str}")
         print(f"   Общее время обработки: {processing_time:.2f}с")
         
         # Информация о заявителе
-        if result.applicant_info:
+        applicant_info = safe_get(result, 'applicant_info')
+        if applicant_info:
             print(f"\n👤 ПРОФИЛЬ ЗАЯВИТЕЛЯ:")
-            print(f"   Имя: {result.applicant_info.name}")
-            print(f"   Возраст: {result.applicant_info.age}")
-            print(f"   Годовой доход: ${result.applicant_info.annual_income}")
-            print(f"   Кредитный рейтинг: {result.applicant_info.credit_score}")
-            print(f"   Трудоустройство: {result.applicant_info.employment_status}")
+            print(f"   Имя: {safe_get(applicant_info, 'name', 'N/A')}")
+            print(f"   Возраст: {safe_get(applicant_info, 'age', 'N/A')}")
+            print(f"   Годовой доход: ${safe_get(applicant_info, 'annual_income', 'N/A')}")
+            print(f"   Кредитный рейтинг: {safe_get(applicant_info, 'credit_score', 'N/A')}")
+            print(f"   Трудоустройство: {safe_get(applicant_info, 'employment_status', 'N/A')}")
         
         # Show loan details
-        if result.loan_details:
+        loan_details = safe_get(result, 'loan_details')
+        if loan_details:
             print(f"\n💰 LOAN REQUEST:")
-            print(f"   Type: {result.loan_details.loan_type.value if result.loan_details.loan_type else 'Unknown'}")
-            print(f"   Amount: ${result.loan_details.requested_amount}")
-            print(f"   Term: {result.loan_details.loan_term_months} months")
-            print(f"   Purpose: {result.loan_details.purpose}")
+            loan_type = safe_get(loan_details, 'loan_type')
+            print(f"   Type: {safe_get_value(loan_type)}")
+            print(f"   Amount: ${safe_get(loan_details, 'requested_amount', 'N/A')}")
+            print(f"   Term: {safe_get(loan_details, 'loan_term_months', 'N/A')} months")
+            print(f"   Purpose: {safe_get(loan_details, 'purpose', 'N/A')}")
         
         # Show risk assessment
-        if result.risk_assessment:
+        risk_assessment = safe_get(result, 'risk_assessment')
+        if risk_assessment:
             print(f"\n⚖️ RISK ASSESSMENT:")
-            print(f"   Risk Level: {result.risk_assessment.overall_risk_level.value}")
-            print(f"   Risk Score: {result.risk_assessment.risk_score:.1f}/100")
-            print(f"   Debt-to-Income Ratio: {result.risk_assessment.debt_to_income_ratio:.2%}" if result.risk_assessment.debt_to_income_ratio else "   Debt-to-Income Ratio: Not calculated")
-            print(f"   Payment Capacity: {result.risk_assessment.payment_capacity_score:.1f}/100")
+            risk_level = safe_get(risk_assessment, 'overall_risk_level')
+            print(f"   Risk Level: {safe_get_value(risk_level)}")
+            print(f"   Risk Score: {safe_get(risk_assessment, 'risk_score', 0):.1f}/100")
+            debt_ratio = safe_get(risk_assessment, 'debt_to_income_ratio')
+            if debt_ratio:
+                print(f"   Debt-to-Income Ratio: {debt_ratio:.2%}")
+            else:
+                print("   Debt-to-Income Ratio: Not calculated")
+            print(f"   Payment Capacity: {safe_get(risk_assessment, 'payment_capacity_score', 0):.1f}/100")
             
-            if result.risk_assessment.risk_factors:
-                print(f"   Risk Factors: {', '.join(result.risk_assessment.risk_factors[:3])}")
+            risk_factors = safe_get(risk_assessment, 'risk_factors', [])
+            if risk_factors:
+                print(f"   Risk Factors: {', '.join(risk_factors[:3])}")
             
-            if result.risk_assessment.mitigating_factors:
-                print(f"   Mitigating Factors: {', '.join(result.risk_assessment.mitigating_factors[:3])}")
+            mitigating_factors = safe_get(risk_assessment, 'mitigating_factors', [])
+            if mitigating_factors:
+                print(f"   Mitigating Factors: {', '.join(mitigating_factors[:3])}")
         
         # Show final decision
-        if result.final_decision:
+        final_decision = safe_get(result, 'final_decision')
+        if final_decision:
             print(f"\n🎯 FINAL DECISION:")
-            print(f"   Decision: {result.final_decision.decision.value if result.final_decision.decision else 'Pending'}")
-            print(f"   Confidence: {result.final_decision.confidence_score:.2f}")
+            decision = safe_get(final_decision, 'decision')
+            print(f"   Decision: {safe_get_value(decision) if decision else 'Pending'}")
+            print(f"   Confidence: {safe_get(final_decision, 'confidence_score', 0):.2f}")
             
-            if result.final_decision.decision.value in ['approved', 'conditionally_approved']:
-                print(f"   Approved Amount: ${result.final_decision.approved_amount}")
-                print(f"   Interest Rate: {result.final_decision.interest_rate}%")
-                print(f"   Term: {result.final_decision.loan_term} months")
+            decision_value = safe_get_value(decision) if decision else ''
+            if decision_value in ['approved', 'conditionally_approved']:
+                print(f"   Approved Amount: ${safe_get(final_decision, 'approved_amount', 'N/A')}")
+                print(f"   Interest Rate: {safe_get(final_decision, 'interest_rate', 'N/A')}%")
+                print(f"   Term: {safe_get(final_decision, 'loan_term', 'N/A')} months")
                 
-                if result.final_decision.conditions:
-                    print(f"   Conditions: {', '.join(result.final_decision.conditions)}")
+                conditions = safe_get(final_decision, 'conditions', [])
+                if conditions:
+                    print(f"   Conditions: {', '.join(conditions)}")
             
-            if result.final_decision.reasons:
-                reasons_text = ', '.join([r.value for r in result.final_decision.reasons])
+            reasons = safe_get(final_decision, 'reasons', [])
+            if reasons:
+                reasons_text = ', '.join([safe_get_value(r) for r in reasons])
                 print(f"   Reasons: {reasons_text}")
             
-            if result.final_decision.manual_review_required:
+            if safe_get(final_decision, 'manual_review_required', False):
                 print(f"   🚨 Manual Review Required")
         
         # Show processing details
         print(f"\n⚙️ PROCESSING DETAILS:")
-        print(f"   Steps Completed: {len([s for s in result.processing_steps if s.status == 'completed'])}")
-        print(f"   Steps Failed: {len([s for s in result.processing_steps if s.status == 'failed'])}")
-        print(f"   Models Used: {', '.join(result.models_used)}")
-        print(f"   Total Retries: {result.total_retry_count}")
-        print(f"   Fallback Instances: {len(result.fallback_instances)}")
-        print(f"   Quality Checks Passed: {result.quality_checks_passed}")
-        print(f"   Quality Checks Failed: {result.quality_checks_failed}")
+        processing_steps = safe_get(result, 'processing_steps', [])
+        print(f"   Steps Completed: {len([s for s in processing_steps if safe_get(s, 'status') == 'completed'])}")
+        print(f"   Steps Failed: {len([s for s in processing_steps if safe_get(s, 'status') == 'failed'])}")
+        print(f"   Models Used: {', '.join(safe_get(result, 'models_used', []))}")
+        print(f"   Total Retries: {safe_get(result, 'total_retry_count', 0)}")
+        print(f"   Fallback Instances: {len(safe_get(result, 'fallback_instances', []))}")
+        print(f"   Quality Checks Passed: {safe_get(result, 'quality_checks_passed', 0)}")
+        print(f"   Quality Checks Failed: {safe_get(result, 'quality_checks_failed', 0)}")
         
         # Show errors and warnings
-        if result.processing_errors:
-            print(f"\n❌ PROCESSING ERRORS ({len(result.processing_errors)}):")
-            for error in result.processing_errors[:3]:  # Show first 3
+        processing_errors = safe_get(result, 'processing_errors', [])
+        if processing_errors:
+            print(f"\n❌ PROCESSING ERRORS ({len(processing_errors)}):")
+            for error in processing_errors[:3]:  # Show first 3
                 print(f"   - {error}")
-            if len(result.processing_errors) > 3:
-                print(f"   ... and {len(result.processing_errors) - 3} more errors")
+            if len(processing_errors) > 3:
+                print(f"   ... and {len(processing_errors) - 3} more errors")
         
-        if result.warnings:
-            print(f"\n⚠️ WARNINGS ({len(result.warnings)}):")
-            for warning in result.warnings[:3]:  # Show first 3
+        warnings = safe_get(result, 'warnings', [])
+        if warnings:
+            print(f"\n⚠️ WARNINGS ({len(warnings)}):")
+            for warning in warnings[:3]:  # Show first 3
                 print(f"   - {warning}")
         
-        if result.human_review_triggers:
+        human_review_triggers = safe_get(result, 'human_review_triggers', [])
+        if human_review_triggers:
             print(f"\n👨‍💼 HUMAN REVIEW TRIGGERS:")
-            for trigger in result.human_review_triggers:
+            for trigger in human_review_triggers:
                 print(f"   - {trigger}")
         
         # Show processing timeline
         print(f"\n⏱️ PROCESSING TIMELINE:")
-        for i, step in enumerate(result.processing_steps[-5:], 1):  # Show last 5 steps
-            status_emoji = {"completed": "✅", "failed": "❌", "in_progress": "🔄"}.get(step.status, "❓")
+        for i, step in enumerate(processing_steps[-5:], 1):  # Show last 5 steps
+            step_status = safe_get(step, 'status', 'unknown')
+            step_name = safe_get(step, 'step_name', 'Unknown Step')
+            status_emoji = {"completed": "✅", "failed": "❌", "in_progress": "🔄"}.get(step_status, "❓")
             duration = ""
-            if step.end_time:
-                duration = f" ({(step.end_time - step.start_time).total_seconds():.1f}s)"
-            print(f"   {i}. {status_emoji} {step.step_name}{duration}")
+            end_time = safe_get(step, 'end_time')
+            start_time = safe_get(step, 'start_time')
+            if end_time and start_time:
+                duration = f" ({(end_time - start_time).total_seconds():.1f}s)"
+            print(f"   {i}. {status_emoji} {step_name}{duration}")
         
         # Compare with expected outcome
         expected = scenario['expected_outcome']
-        actual = result.current_status.value
+        actual = safe_get_value(current_status)
         
         outcome_match = (
             (expected == "approved" and actual == "approved") or
@@ -506,7 +546,7 @@ async def demonstrate_workflow_capabilities():
 
 async def comprehensive_workflow_test():
     """Run comprehensive test of the complex workflow."""
-    print("🚀 Phase 6: Complex Multi-Model Loan Processing Workflow")
+    print("Phase 6: Complex Multi-Model Loan Processing Workflow")
     print("This is the grand finale - combining all patterns from previous phases!")
     print("Make sure Ollama is running with the required models!\n")
     
@@ -594,7 +634,7 @@ async def main():
     print("   • Комплексная обработка ошибок и восстановление")
     print("   • Механизмы голосования моделей и консенсуса")
     print("")
-    print("🚀 Теперь вы готовы создавать продакшн LangGraph приложения!")
+    print("Теперь вы готовы создавать продакшн LangGraph приложения!")
     print(f"{'='*80}")
 
 

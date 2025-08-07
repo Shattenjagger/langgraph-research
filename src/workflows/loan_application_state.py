@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field
 from enum import Enum
 from datetime import datetime
 from decimal import Decimal
-from dataclasses import dataclass
 
 
 class LoanType(Enum):
@@ -57,7 +56,6 @@ class DecisionReason(Enum):
     POLICY_VIOLATION = "policy_violation"
 
 
-@dataclass
 class ApplicantInfo(BaseModel):
     """Applicant information."""
     name: str
@@ -72,7 +70,6 @@ class ApplicantInfo(BaseModel):
     address: Optional[str] = None
 
 
-@dataclass
 class LoanDetails(BaseModel):
     """Loan request details."""
     loan_type: Optional[LoanType] = None
@@ -83,7 +80,6 @@ class LoanDetails(BaseModel):
     collateral_value: Optional[Decimal] = None
 
 
-@dataclass
 class ProcessingStep(BaseModel):
     """Individual processing step record."""
     step_name: str
@@ -97,7 +93,6 @@ class ProcessingStep(BaseModel):
     retry_count: int = 0
 
 
-@dataclass
 class RiskAssessment(BaseModel):
     """Risk assessment results."""
     overall_risk_level: Optional[RiskLevel] = None
@@ -109,7 +104,6 @@ class RiskAssessment(BaseModel):
     collateral_coverage_ratio: Optional[float] = None
 
 
-@dataclass
 class DecisionResult(BaseModel):
     """Final decision result."""
     decision: Optional[ProcessingStatus] = None

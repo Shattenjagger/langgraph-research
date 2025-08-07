@@ -21,7 +21,8 @@ class DocumentRouter:
         confidence = state.classification_confidence
         content_length = len(state.document_content)
         
-        logger.info(f"Routing decision for {doc_type.value if doc_type else 'unknown'} "
+        doc_type_str = doc_type.value if doc_type and hasattr(doc_type, 'value') else str(doc_type) if doc_type else 'unknown'
+        logger.info(f"Routing decision for {doc_type_str} "
                    f"(confidence: {confidence:.2f}, length: {content_length})")
         
         # Route based on confidence first
