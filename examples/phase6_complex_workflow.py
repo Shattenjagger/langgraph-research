@@ -322,8 +322,8 @@ Total Fixed Monthly Obligations: $1,650
 async def process_loan_application(workflow: ComplexLoanProcessingWorkflow, scenario_name: str, scenario: dict):
     """Обработка одного сценария кредитной заявки."""
     print(f"\n{'='*80}")
-    print(f"🏦 ОБРАБОТКА КРЕДИТНОЙ ЗАЯВКИ: {scenario_name.upper()}")
-    print(f"📝 Описание: {scenario['description']}")
+    print(f"ОБРАБОТКА КРЕДИТНОЙ ЗАЯВКИ: {scenario_name.upper()}")
+    print(f"Описание: {scenario['description']}")
     print(f"Ожидаемый результат: {scenario['expected_outcome']}")
     print(f"{'='*80}")
     
@@ -466,7 +466,7 @@ async def process_loan_application(workflow: ComplexLoanProcessingWorkflow, scen
         for i, step in enumerate(processing_steps[-5:], 1):  # Show last 5 steps
             step_status = safe_get(step, 'status', 'unknown')
             step_name = safe_get(step, 'step_name', 'Unknown Step')
-            status_emoji = {"completed": "✅", "failed": "❌", "in_progress": "🔄"}.get(step_status, "❓")
+            status_emoji = {"completed": "+", "failed": "-", "in_progress": "+"}.get(step_status, "?")
             duration = ""
             end_time = safe_get(step, 'end_time')
             start_time = safe_get(step, 'start_time')
@@ -483,9 +483,8 @@ async def process_loan_application(workflow: ComplexLoanProcessingWorkflow, scen
             (expected == "declined" and actual == "declined") or
             (expected == "manual_review" and actual == "requires_manual_review")
         )
-        
-        match_emoji = "✅" if outcome_match else "❌"
-        print(f"\n{match_emoji} OUTCOME ASSESSMENT:")
+
+        print(f"\n OUTCOME ASSESSMENT:")
         print(f"   Expected: {expected}")
         print(f"   Actual: {actual}")
         print(f"   Match: {'Yes' if outcome_match else 'No'}")
@@ -496,14 +495,14 @@ async def process_loan_application(workflow: ComplexLoanProcessingWorkflow, scen
             "actual": actual,
             "match": outcome_match,
             "processing_time": processing_time,
-            "steps_completed": len([s for s in result.processing_steps if s.status == 'completed']),
-            "retries": result.total_retry_count,
-            "fallbacks": len(result.fallback_instances),
-            "errors": len(result.processing_errors)
+            "steps_completed": len([s for s in processing_steps if safe_get(s, 'status') == 'completed']),
+            "retries": safe_get(result, 'total_retry_count', 0),
+            "fallbacks": len(safe_get(result, 'fallback_instances', [])),
+            "errors": len(safe_get(result, 'processing_errors', []))
         }
         
     except Exception as e:
-        print(f"❌ SCENARIO FAILED: {str(e)}")
+        print(f"X SCENARIO FAILED: {str(e)}")
         return {
             "scenario": scenario_name,
             "error": str(e),
@@ -514,33 +513,33 @@ async def process_loan_application(workflow: ComplexLoanProcessingWorkflow, scen
 async def demonstrate_workflow_capabilities():
     """Demonstrate advanced workflow capabilities."""
     print(f"\n{'='*80}")
-    print("🔧 WORKFLOW CAPABILITY DEMONSTRATION")
+    print("WORKFLOW CAPABILITY DEMONSTRATION")
     print(f"{'='*80}")
     
     manager = LocalModelManager()
     workflow = ComplexLoanProcessingWorkflow(manager)
     
-    print("🎯 Key Capabilities Being Demonstrated:")
-    print("   • Multi-model coordination (Fast → Standard → Reasoning)")
-    print("   • Conditional branching based on risk and quality")
-    print("   • Automatic retry with exponential backoff")
-    print("   • Circuit breaker protection")
-    print("   • Comprehensive fallback strategies")
-    print("   • Quality checkpoints and validation")
-    print("   • Human escalation for edge cases")
-    print("   • Model voting for critical decisions")
+    print("Key Capabilities Being Demonstrated:")
+    print("   - Multi-model coordination (Fast -> Standard -> Reasoning)")
+    print("   - Conditional branching based on risk and quality")
+    print("   - Automatic retry with exponential backoff")
+    print("   - Circuit breaker protection")
+    print("   - Comprehensive fallback strategies")
+    print("   - Quality checkpoints and validation")
+    print("   - Human escalation for edge cases")
+    print("   - Model voting for critical decisions")
     
     # Get system status
     status = workflow.get_workflow_status()
     
-    print(f"\n🛠️ SYSTEM STATUS:")
+    print(f"\nSYSTEM STATUS:")
     print(f"   Available Models: {', '.join(status['available_models'])}")
     print(f"   Service Level: {status['service_level']}")
     
     if status.get('circuit_breakers'):
         print(f"   Circuit Breaker Status:")
         for model, cb_status in status['circuit_breakers'].items():
-            state_emoji = {"closed": "🟢", "open": "🔴", "half_open": "🟡"}.get(cb_status.get('state'), "⚪")
+            state_emoji = {"closed": "OK", "open": "FAIL", "half_open": "WAIT"}.get(cb_status.get('state'), "N/A")
             print(f"     {model}: {state_emoji} {cb_status.get('state', 'unknown')}")
 
 
@@ -566,7 +565,7 @@ async def comprehensive_workflow_test():
     
     # Show comprehensive summary
     print(f"\n{'='*80}")
-    print("📊 COMPREHENSIVE TEST SUMMARY")
+    print("+++ COMPREHENSIVE TEST SUMMARY")
     print(f"{'='*80}")
     
     if results:
@@ -577,7 +576,7 @@ async def comprehensive_workflow_test():
         total_fallbacks = sum(r.get('fallbacks', 0) for r in results)
         total_errors = sum(r.get('errors', 0) for r in results)
         
-        print(f"📈 OVERALL PERFORMANCE:")
+        print(f"++++ OVERALL PERFORMANCE:")
         print(f"   Scenarios Processed: {len(results)}")
         print(f"   Expected Outcomes Matched: {len(successful_scenarios)}/{len(results)} ({len(successful_scenarios)/len(results)*100:.1f}%)")
         print(f"   Total Processing Time: {total_processing_time:.2f}s")
@@ -593,7 +592,7 @@ async def comprehensive_workflow_test():
         
         for result in results:
             if 'error' not in result:
-                match_emoji = "✅" if result['match'] else "❌"
+                match_emoji = "✅" if result['match'] else "X"
                 print(f"{result['scenario']:<25} {result['expected']:<15} {result['actual']:<20} "
                       f"{result['processing_time']:<8.1f} {match_emoji}")
         
@@ -601,7 +600,7 @@ async def comprehensive_workflow_test():
         system_status = workflow.get_workflow_status()
         
         if system_status.get('model_stats'):
-            print(f"\n🧠 MODEL USAGE STATISTICS:")
+            print(f"\n! MODEL USAGE STATISTICS:")
             for model_name, stats in system_status['model_stats'].items():
                 print(f"   {model_name.upper()}: {stats['total_operations']} operations, "
                       f"{stats['success_rate']:.1%} success rate")
@@ -624,15 +623,15 @@ async def main():
     print("   Фаза 5: Сложные стратегии отказоустойчивости с кэшированием")
     print("   Фаза 6: Комплексная автоматизация бизнес-процессов с множественными моделями")
     print("")
-    print("🎯 Освоенные паттерны реального мира:")
-    print("   • Оркестрация и координация нескольких моделей")
-    print("   • Условные рабочие процессы с динамической маршрутизацией")
-    print("   • Экспоненциальная задержка и паттерны circuit breaker")
-    print("   • Интеллектуальное кэширование и оптимизация ответов")
-    print("   • Процедуры передачи человеку и эскалации")
-    print("   • Контрольные точки качества и шлюзы валидации")
-    print("   • Комплексная обработка ошибок и восстановление")
-    print("   • Механизмы голосования моделей и консенсуса")
+    print("Освоенные паттерны реального мира:")
+    print("   - Оркестрация и координация нескольких моделей")
+    print("   - Условные рабочие процессы с динамической маршрутизацией")
+    print("   - Экспоненциальная задержка и паттерны circuit breaker")
+    print("   - Интеллектуальное кэширование и оптимизация ответов")
+    print("   - Процедуры передачи человеку и эскалации")
+    print("   - Контрольные точки качества и шлюзы валидации")
+    print("   - Комплексная обработка ошибок и восстановление")
+    print("   - Механизмы голосования моделей и консенсуса")
     print("")
     print("Теперь вы готовы создавать продакшн LangGraph приложения!")
     print(f"{'='*80}")

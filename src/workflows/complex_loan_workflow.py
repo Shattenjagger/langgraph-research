@@ -461,14 +461,20 @@ class ComplexLoanProcessingWorkflow:
             
             # Handle both object and dictionary returns
             if hasattr(final_state, 'current_status'):
+                # It's a proper state object
                 status = final_state.current_status.value if hasattr(final_state.current_status, 'value') else str(final_state.current_status)
+                result_state = final_state
             else:
+                # LangGraph returned a dictionary - convert it back to state object
                 status = final_state.get('current_status', {})
                 status = status.value if hasattr(status, 'value') else str(status)
+                
+                # Reconstruct the state object from dictionary
+                result_state = LoanApplicationState(**final_state)
             
             logger.info(f"Completed loan application processing: {application_id} -> {status}")
             
-            return final_state
+            return result_state
             
         except Exception as e:
             logger.error(f"Workflow failed for application {application_id}: {e}")

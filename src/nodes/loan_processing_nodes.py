@@ -17,6 +17,68 @@ from ..workflows.loan_application_state import (
 logger = logging.getLogger(__name__)
 
 
+def extract_and_parse_json(response_text: str) -> Optional[Dict[str, Any]]:
+    """
+    Robust JSON extraction and parsing from model responses.
+    Handles markdown formatting, extra text, and malformed JSON.
+    """
+    if not response_text or not response_text.strip():
+        return None
+    
+    response_text = response_text.strip()
+    
+    # Try to find JSON in the response
+    if '{' not in response_text or '}' not in response_text:
+        return None
+    
+    # Extract JSON part
+    start = response_text.find('{')
+    end = response_text.rfind('}') + 1
+    json_str = response_text[start:end]
+    
+    # Try to parse as-is first
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError:
+        pass
+    
+    # Try to fix common JSON issues
+    try:
+        # Remove comments (// style)
+        fixed_json = re.sub(r'//.*$', '', json_str, flags=re.MULTILINE)
+        # Fix single quotes to double quotes  
+        fixed_json = fixed_json.replace("'", '"')
+        # Fix trailing commas
+        fixed_json = re.sub(r',(\s*[}\]])', r'\1', fixed_json)
+        # Fix unquoted keys (basic attempt)
+        fixed_json = re.sub(r'(\w+):', r'"\1":', fixed_json)
+        return json.loads(fixed_json)
+    except json.JSONDecodeError:
+        pass
+    
+    # If all else fails, try to extract key-value pairs with regex
+    try:
+        result = {}
+        # Extract quoted string values
+        for match in re.finditer(r'"(\w+)"\s*:\s*"([^"]*)"', json_str):
+            key, value = match.groups()
+            result[key] = value
+        
+        # Extract numeric values
+        for match in re.finditer(r'"(\w+)"\s*:\s*(\d+(?:\.\d+)?)', json_str):
+            key, value = match.groups()
+            result[key] = float(value) if '.' in value else int(value)
+        
+        # Extract boolean values
+        for match in re.finditer(r'"(\w+)"\s*:\s*(true|false)', json_str, re.IGNORECASE):
+            key, value = match.groups()
+            result[key] = value.lower() == 'true'
+        
+        return result if result else None
+    except Exception:
+        return None
+
+
 class LoanDocumentAnalyzer:
     """Analyzes loan application documents using multiple models."""
     
@@ -173,17 +235,11 @@ Return as JSON object.
     
     def _parse_document_analysis(self, response: str) -> Dict[str, Any]:
         """Parse document analysis response."""
-        try:
-            # Try to extract JSON from response
-            if '{' in response and '}' in response:
-                start = response.find('{')
-                end = response.rfind('}') + 1
-                json_str = response[start:end]
-                return json.loads(json_str)
-            else:
-                # Fallback to simple key-value extraction
-                return {"raw_analysis": response}
-        except json.JSONDecodeError:
+        result = extract_and_parse_json(response)
+        if result:
+            return result
+        else:
+            # Fallback to raw analysis
             return {"raw_analysis": response, "parse_error": True}
     
     async def _extract_consolidated_info(
@@ -235,8 +291,18 @@ Extract and return JSON with two sections:
         )
         
         try:
-            if result['success']:
-                data = json.loads(result['result'])
+            if result['success'] and result['result']:
+                # Check if result is empty or whitespace only
+                json_text = result['result'].strip()
+                if not json_text:
+                    logger.warning("Empty response from model, returning default values")
+                    return ApplicantInfo(name="Unknown"), LoanDetails()
+                
+                # Try to parse JSON using robust helper
+                data = extract_and_parse_json(json_text)
+                if not data:
+                    logger.warning("Failed to parse JSON response, attempting direct extraction")
+                    return self._extract_from_raw_documents(raw_data, analysis_results)
                 
                 # Create ApplicantInfo
                 applicant_data = data.get('applicant', {})
@@ -245,17 +311,159 @@ Extract and return JSON with two sections:
                 # Create LoanDetails
                 loan_data = data.get('loan', {})
                 if 'loan_type' in loan_data:
-                    loan_data['loan_type'] = LoanType(loan_data['loan_type'])
+                    # Handle case sensitivity - convert to lowercase
+                    loan_type_str = str(loan_data['loan_type']).lower()
+                    try:
+                        loan_data['loan_type'] = LoanType(loan_type_str)
+                    except ValueError:
+                        logger.warning(f"Unknown loan type: {loan_data['loan_type']}, defaulting to personal")
+                        loan_data['loan_type'] = LoanType.PERSONAL
                 loan = LoanDetails(**loan_data)
                 
                 return applicant, loan
             else:
-                # Return empty objects if extraction fails
-                return ApplicantInfo(name="Unknown"), LoanDetails()
+                # Try direct extraction as fallback
+                logger.info("Model extraction failed, attempting direct document parsing")
+                return self._extract_from_raw_documents(raw_data, analysis_results)
                 
         except Exception as e:
             logger.error(f"Failed to consolidate information: {e}")
             return ApplicantInfo(name="Unknown"), LoanDetails()
+    
+    def _extract_basic_info_from_text(self, text: str) -> tuple:
+        """Extract basic information from non-JSON text response."""
+        import re
+        
+        # Try to extract name
+        name_match = re.search(r'name[:\s]+([^,\n]+)', text, re.IGNORECASE)
+        name = name_match.group(1).strip() if name_match else "Unknown"
+        
+        # Try to extract income
+        income_match = re.search(r'(?:income|salary)[:\s]+\$?([0-9,]+)', text, re.IGNORECASE)
+        income = None
+        if income_match:
+            try:
+                income = Decimal(income_match.group(1).replace(',', ''))
+            except:
+                pass
+        
+        # Try to extract loan amount
+        amount_match = re.search(r'(?:amount|requested)[:\s]+\$?([0-9,]+)', text, re.IGNORECASE)
+        amount = None
+        if amount_match:
+            try:
+                amount = Decimal(amount_match.group(1).replace(',', ''))
+            except:
+                pass
+        
+        # Create basic objects
+        applicant = ApplicantInfo(name=name, annual_income=income)
+        loan = LoanDetails(requested_amount=amount)
+        
+        return applicant, loan
+    
+    def _extract_from_raw_documents(self, raw_data: str, analysis_results: Dict[str, Any]) -> Tuple[ApplicantInfo, LoanDetails]:
+        """Fallback: Extract information directly from raw application data."""
+        import re
+        
+        # Combine all text for analysis
+        all_text = raw_data
+        for doc_results in analysis_results.values():
+            if isinstance(doc_results, dict) and 'content' in doc_results:
+                all_text += " " + str(doc_results['content'])
+        
+        # Extract name patterns
+        name_patterns = [
+            r'Full Name[:\s]+([^\n,]+)',
+            r'Name[:\s]+([^\n,]+)', 
+            r'Applicant[:\s]+([^\n,]+)',
+            r'Employee[:\s]+([^\n,]+)'
+        ]
+        name = "Unknown"
+        for pattern in name_patterns:
+            match = re.search(pattern, all_text, re.IGNORECASE)
+            if match:
+                name = match.group(1).strip()
+                break
+        
+        # Extract income patterns
+        income_patterns = [
+            r'Annual Income[:\s]+\$?([0-9,]+)',
+            r'Gross Pay[:\s]+\$?([0-9,]+)',
+            r'Total Gross Pay[:\s]+\$?([0-9,]+)',
+            r'Monthly Income[:\s]+\$?([0-9,]+)',
+        ]
+        income = None
+        for pattern in income_patterns:
+            match = re.search(pattern, all_text, re.IGNORECASE)
+            if match:
+                try:
+                    value = Decimal(match.group(1).replace(',', ''))
+                    # If it's monthly, estimate annual
+                    if 'monthly' in pattern.lower():
+                        value = value * 12
+                    income = value
+                    break
+                except:
+                    pass
+        
+        # Extract loan amount patterns
+        amount_patterns = [
+            r'Requested Amount[:\s]+\$?([0-9,]+)',
+            r'Loan.*Amount[:\s]+\$?([0-9,]+)',
+            r'Amount[:\s]+\$?([0-9,]+)'
+        ]
+        loan_amount = None
+        for pattern in amount_patterns:
+            match = re.search(pattern, all_text, re.IGNORECASE)
+            if match:
+                try:
+                    loan_amount = Decimal(match.group(1).replace(',', ''))
+                    break
+                except:
+                    pass
+        
+        # Extract credit score
+        credit_patterns = [
+            r'Credit Score[:\s]+([0-9]+)',
+            r'Score[:\s]+([0-9]+)'
+        ]
+        credit_score = None
+        for pattern in credit_patterns:
+            match = re.search(pattern, all_text, re.IGNORECASE)
+            if match:
+                try:
+                    score = int(match.group(1))
+                    if 300 <= score <= 850:  # Valid credit score range
+                        credit_score = score
+                        break
+                except:
+                    pass
+        
+        # Extract loan type
+        loan_type = None
+        if 'personal' in all_text.lower():
+            loan_type = LoanType.PERSONAL
+        elif 'business' in all_text.lower():
+            loan_type = LoanType.BUSINESS
+        elif 'mortgage' in all_text.lower():
+            loan_type = LoanType.MORTGAGE
+        elif 'auto' in all_text.lower():
+            loan_type = LoanType.AUTO
+        
+        # Create objects with extracted data
+        applicant = ApplicantInfo(
+            name=name,
+            annual_income=income,
+            credit_score=credit_score
+        )
+        
+        loan = LoanDetails(
+            loan_type=loan_type,
+            requested_amount=loan_amount
+        )
+        
+        return applicant, loan
     
     def _assess_completeness(self, applicant: ApplicantInfo, loan: LoanDetails) -> float:
         """Assess completeness of extracted information."""
@@ -352,7 +560,11 @@ Calculate and return JSON:
         )
         
         try:
-            return json.loads(result['result']) if result['success'] else {}
+            if result['success']:
+                data = extract_and_parse_json(result['result'])
+                return data if data else {"parsing_failed": True}
+            else:
+                return {}
         except:
             return {"calculation_failed": True}
     
@@ -382,7 +594,11 @@ Return JSON assessment:
         )
         
         try:
-            return json.loads(result['result']) if result['success'] else {}
+            if result['success']:
+                data = extract_and_parse_json(result['result'])
+                return data if data else {"parsing_failed": True}
+            else:
+                return {}
         except:
             return {}
     
@@ -471,7 +687,9 @@ Return JSON:
         
         try:
             if result['success']:
-                data = json.loads(result['result'])
+                data = extract_and_parse_json(result['result'])
+                if not data:
+                    raise json.JSONDecodeError("No valid JSON found in response", result['result'], 0)
                 
                 risk_level_map = {
                     "low": RiskLevel.LOW,
@@ -577,7 +795,9 @@ Return JSON decision:
         
         try:
             if voting_result['success']:
-                decision_data = json.loads(voting_result['result'])
+                decision_data = extract_and_parse_json(voting_result['result'])
+                if not decision_data:
+                    raise json.JSONDecodeError("No valid JSON found in response", voting_result['result'], 0)
                 
                 # Map decision string to enum
                 decision_map = {
